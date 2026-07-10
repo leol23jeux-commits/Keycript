@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keycrypt</title>
+<meta name="description" content="Keycrypt code et décode tes mots en utilisant les symboles de ton clavier. AZERTY, QWERTY ou emojis — colle un mot, obtiens son code en un clic.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%23141418'/%3E%3Crect x='72' y='152' width='368' height='208' rx='40' fill='%23232328' stroke='%233a3a42' stroke-width='4'/%3E%3Ctext x='150' y='298' font-family='monospace' font-size='130' font-weight='700' fill='%23f2f2f4' text-anchor='middle'%3EA%3C/text%3E%3Cpath d='M218 256 L278 256 M258 234 L280 256 L258 278' stroke='%234c8dff' stroke-width='10' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Ctext x='352' y='298' font-family='monospace' font-size='130' font-weight='800' fill='%234c8dff' text-anchor='middle'%3E1%3C/text%3E%3C/svg%3E">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&display=swap');
+
+  :root{
+    --bg:#141418;
+    --key:#232328;
+    --key-top:#2c2c32;
+    --key-border:#38383f;
+    --accent:#4c8dff;
+    --accent2:#8b6cf7;
+    --accent-soft:#4c8dff26;
+    --accent-glow:#4c8dff55;
+    --text:#f2f2f4;
+    --muted:#8a8a93;
+  }
+  *{box-sizing:border-box;}
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 0%, #1c1c24 0%, transparent 55%),
+      radial-gradient(circle at 85% 100%, #1a1e2b 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'JetBrains Mono', monospace;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 18px 60px;
+    overflow-x:hidden;
+  }
+
+  /* ---------- INTRO ---------- */
+  #intro{
+    position:fixed;
+    inset:0;
+    background:var(--bg);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    transition:opacity .6s ease, visibility .6s ease;
+  }
+  #intro.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+
+  .intro-scene{ display:flex; align-items:center; gap:14px; position:relative; }
+  .intro-key-svg{
+    width:64px; height:64px; opacity:0;
+    transform:translateX(-60px) rotate(-25deg);
+    animation: keySlideIn .7s cubic-bezier(.2,.8,.2,1) forwards;
+    filter:drop-shadow(0 0 14px var(--accent-glow));
+  }
+  @keyframes keySlideIn{
+    0%{ opacity:0; transform:translateX(-60px) rotate(-25deg); }
+    70%{ opacity:1; transform:translateX(4px) rotate(4deg); }
+    100%{ opacity:1; transform:translateX(0) rotate(0deg); }
+  }
+
+  .intro-word{ display:flex; font-family:'Fraunces', serif; font-weight:900; font-size:44px; letter-spacing:-0.01em; }
+  .intro-word span{
+    opacity:0; display:inline-block; transform:translateY(10px);
+    animation: letterIn .45s cubic-bezier(.2,.8,.2,1) forwards;
+    color:var(--text);
+  }
+  .intro-word span:nth-child(1){ animation-delay: .55s; }
+  .intro-word span:nth-child(2){ animation-delay: .60s; color:var(--accent); }
+  .intro-word span:nth-child(3){ animation-delay: .65s; }
+  .intro-word span:nth-child(4){ animation-delay: .70s; }
+  .intro-word span:nth-child(5){ animation-delay: .75s; }
+  .intro-word span:nth-child(6){ animation-delay: .80s; }
+  .intro-word span:nth-child(7){ animation-delay: .85s; }
+  .intro-word span:nth-child(8){ animation-delay: .90s; }
+  @keyframes letterIn{ 0%{ opacity:0; transform:translateY(10px); } 100%{ opacity:1; transform:translateY(0); } }
+
+  .intro-glow{
+    position:absolute; width:340px; height:340px; border-radius:50%;
+    background:radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    opacity:0; animation: glowPulse 1.4s ease .4s forwards; z-index:-1;
+  }
+  @keyframes glowPulse{ 0%{ opacity:0; transform:scale(0.7); } 50%{ opacity:1; } 100%{ opacity:0; transform:scale(1.3); } }
+
+  /* ---------- MAIN CONTENT ---------- */
+  #app{
+    display:flex; flex-direction:column; align-items:center; width:100%;
+    opacity:0; transform:translateY(10px);
+    transition:opacity .6s ease, transform .6s ease;
+  }
+  #app.visible{ opacity:1; transform:translateY(0); }
+
+  header{ text-align:center; margin-bottom:22px; }
+  .brand-row{ display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px; }
+  .brand-key{
+    width:34px; height:26px; border-radius:7px;
+    background:linear-gradient(180deg, var(--key-top), var(--key));
+    border:1px solid var(--key-border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:800; color:var(--accent);
+  }
+  .eyebrow{ font-size:11px; letter-spacing:0.28em; text-transform:uppercase; color:var(--accent); font-weight:700; }
+  h1{ font-family:'Fraunces', serif; font-size:38px; font-weight:700; margin:0 0 8px; letter-spacing:-0.01em; }
+  header p{ color:var(--muted); font-size:13.5px; margin:0; max-width:360px; }
+
+  .mode-switch{
+    display:flex; gap:4px; background:#191920; border:1px solid #26262d;
+    border-radius:14px; padding:4px; margin-bottom:18px; width:100%; max-width:520px;
+  }
+  .mode-btn{
+    flex:1; text-align:center; padding:9px 6px; border-radius:10px;
+    font-size:12px; font-weight:700; letter-spacing:0.02em; color:var(--muted);
+    cursor:pointer; transition:background .15s ease, color .15s ease; user-select:none;
+  }
+  .mode-btn.active{
+    background:linear-gradient(180deg, var(--key-top), var(--key));
+    color:var(--text); box-shadow:0 0 0 1px var(--key-border) inset;
+  }
+
+  .panel{
+    width:100%; max-width:520px;
+    background:linear-gradient(180deg, #1b1b21, #17171c);
+    border:1px solid #2a2a31; border-radius:20px; padding:24px;
+    box-shadow:0 20px 50px -20px rgba(0,0,0,0.6);
+  }
+
+  label{ display:block; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+
+  textarea{
+    width:100%; min-height:90px; resize:vertical;
+    background:#0f0f13; border:1px solid #2e2e36; border-radius:12px;
+    padding:14px; color:var(--text); font-family:'JetBrains Mono', monospace;
+    font-size:16px; line-height:1.5; outline:none;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+
+  .buttons{ display:flex; gap:10px; margin:18px 0; }
+  button{
+    font-family:'JetBrains Mono', monospace; font-size:13px; font-weight:700;
+    letter-spacing:0.04em; padding:13px 10px; border-radius:12px;
+    border:1px solid var(--key-border);
+    background:linear-gradient(180deg, var(--key-top), var(--key));
+    color:var(--text); cursor:pointer;
+    transition:transform .08s ease, background .15s ease, border-color .15s ease, box-shadow .2s ease;
+    position:relative; overflow:hidden;
+  }
+  .buttons button{ flex:1; }
+  button:active{ transform:translateY(2px) scale(0.98); }
+  button.primary{ background:linear-gradient(180deg, #5a97ff, var(--accent)); border-color:#5a97ff; color:#0d1420; }
+  button.primary.pulse{ animation: btnPulse .5s ease; }
+  @keyframes btnPulse{ 0%{ box-shadow:0 0 0 0 var(--accent-glow); } 60%{ box-shadow:0 0 0 14px transparent; } 100%{ box-shadow:0 0 0 0 transparent; } }
+  button.ghost{ background:transparent; color:var(--muted); }
+
+  .output-wrap{ position:relative; }
+  .output-label-row{ display:flex; align-items:center; justify-content:space-between; }
+  #output{ background:#0f0f13; }
+  #output[data-empty="true"]::before{ content: attr(data-placeholder); color:var(--muted); }
+  #copyBtn{
+    display:flex; align-items:center; gap:6px; background:none;
+    border:1px solid var(--key-border); color:var(--muted);
+    font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    padding:5px 10px; border-radius:8px; cursor:pointer; flex:none;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  #copyBtn:hover{ border-color:var(--accent); color:var(--accent); }
+  #copyBtn.copied{ border-color:var(--accent); color:var(--accent); }
+  #copyBtn svg{ width:13px; height:13px; }
+
+  .keystrip{ display:flex; flex-wrap:wrap; gap:6px; margin-top:20px; min-height:38px; }
+  .keycap{
+    display:flex; align-items:center; justify-content:center;
+    min-width:34px; height:34px; padding:0 4px; border-radius:8px;
+    background:linear-gradient(180deg, var(--key-top), var(--key));
+    border:1px solid var(--key-border); font-size:15px; font-weight:700;
+    color:var(--accent); animation:pop .22s cubic-bezier(.3,1.4,.5,1) both;
+  }
+  @keyframes pop{ from{ transform:scale(0.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
+
+  .vkb-wrap{
+    width:100%; max-width:520px; margin-top:16px;
+    background:linear-gradient(180deg, #1b1b21, #17171c);
+    border:1px solid #2a2a31; border-radius:20px; padding:18px;
+  }
+  .vkb-row{ display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
+  .vkb-key{
+    flex:1; max-width:34px; aspect-ratio:1/1; border-radius:6px;
+    background:#1a1a1f; border:1px solid #2a2a31;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:600; color:#54545c; text-transform:uppercase;
+    transition:background .12s ease, color .12s ease, border-color .12s ease, transform .12s ease;
+  }
+  .vkb-key.active{
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    color:#0d1420; border-color:var(--accent); transform:translateY(-3px);
+    box-shadow:0 6px 16px var(--accent-glow);
+  }
+
+  .history-wrap{ width:100%; max-width:520px; margin-top:16px; }
+  .history-title{ font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; padding-left:4px; }
+  .history-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 14px; border-radius:12px; background:#191920;
+    border:1px solid #26262d; margin-bottom:6px; font-size:13px;
+    cursor:pointer; transition:border-color .12s ease; animation:pop .2s ease;
+  }
+  .history-item:hover{ border-color:var(--accent); }
+  .history-from{ color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:44%; }
+  .history-arrow{ color:var(--accent); flex:none; }
+  .history-to{ color:var(--text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:44%; }
+
+  footer{ margin-top:26px; text-align:center; }
+  .toggle-table{
+    background:none; border:none; color:var(--muted);
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    text-decoration:underline; cursor:pointer; padding:8px;
+  }
+
+  table{ border-collapse:collapse; margin:14px auto 0; font-size:13px; }
+  td, th{ border:1px solid #2a2a31; padding:6px 10px; text-align:center; }
+  th{ color:var(--muted); font-weight:500; }
+  td.letter{ color:var(--text); font-weight:700; }
+  td.code{ color:var(--accent); }
+  #tableWrap{ display:none; }
+
+  @media (prefers-reduced-motion: reduce){
+    .keycap, .intro-key-svg, .intro-word span, .intro-glow, button.pulse{ animation:none !important; }
+    #app{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="intro">
+  <div class="intro-glow"></div>
+  <div class="intro-scene">
+    <svg class="intro-key-svg" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="keyGradIntro" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#8b6cf7"/>
+          <stop offset="100%" stop-color="#4c8dff"/>
+        </linearGradient>
+      </defs>
+      <circle cx="30" cy="30" r="18" stroke="url(#keyGradIntro)" stroke-width="7"/>
+      <rect x="26" y="46" width="8" height="42" fill="url(#keyGradIntro)"/>
+      <rect x="34" y="66" width="10" height="8" fill="url(#keyGradIntro)"/>
+      <rect x="34" y="80" width="10" height="8" fill="url(#keyGradIntro)"/>
+    </svg>
+    <div class="intro-word">
+      <span>K</span><span>e</span><span>y</span><span>c</span><span>r</span><span>y</span><span>p</span><span>t</span>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+
+<header>
+  <div class="brand-row">
+    <div class="brand-key">&amp;</div>
+    <div class="eyebrow">Chiffrement clavier</div>
+  </div>
+  <h1>Keycrypt</h1>
+  <p>Un clavier, un code secret. Transforme tes mots en symboles ou en emojis.</p>
+</header>
+
+<div class="mode-switch" id="modeSwitch">
+  <div class="mode-btn active" data-mode="azerty">AZERTY</div>
+  <div class="mode-btn" data-mode="qwerty">QWERTY</div>
+  <div class="mode-btn" data-mode="emoji">Emoji</div>
+</div>
+
+<div class="panel">
+  <label for="input">Mot ou phrase</label>
+  <textarea id="input" placeholder="Écris ici..." autofocus></textarea>
+
+  <div class="buttons">
+    <button class="primary" id="encodeBtn">Coder →</button>
+    <button id="decodeBtn">← Décoder</button>
+    <button class="ghost" id="clearBtn">Effacer</button>
+  </div>
+
+  <div class="output-wrap">
+    <div class="output-label-row">
+      <label for="output">Résultat</label>
+      <button id="copyBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span id="copyLabel">Copier</span>
+      </button>
+    </div>
+    <textarea id="output" readonly data-placeholder="Le résultat s'affiche ici..." data-empty="true"></textarea>
+  </div>
+
+  <div class="keystrip" id="keystrip"></div>
+</div>
+
+<div class="vkb-wrap" id="vkbWrap"></div>
+
+<div class="history-wrap" id="historyWrap" style="display:none;">
+  <div class="history-title">Historique</div>
+  <div id="historyList"></div>
+</div>
+
+<footer>
+  <button class="toggle-table" id="toggleTable">Voir la table de correspondance</button>
+  <div id="tableWrap"></div>
+</footer>
+
+</div>
+
+<script>
+  const MAPS = {
+    azerty: {
+      'a':'1', 'b':'2', 'c':'3', 'd':'4', 'e':'5', 'f':'6', 'g':'7', 'h':'8', 'i':'9',
+      'j':'0', 'k':'&', 'l':'-', 'm':'/', 'n':':', 'o':';', 'p':'(', 'q':')', 'r':'€',
+      's':'@', 't':'"', 'u':'.', 'v':',', 'w':'?', 'x':"'", 'y':'!', 'z':'#'
+    },
+    qwerty: {
+      'a':'!', 'b':'@', 'c':'#', 'd':'$', 'e':'%', 'f':'^', 'g':'&', 'h':'*', 'i':'(',
+      'j':')', 'k':'-', 'l':'_', 'm':'=', 'n':'+', 'o':'[', 'p':']', 'q':'{', 'r':'}',
+      's':';', 't':':', 'u':"'", 'v':'"', 'w':',', 'x':'.', 'y':'<', 'z':'>'
+    },
+    emoji: {
+      'a':'🍎', 'b':'🐝', 'c':'🐱', 'd':'🐶', 'e':'🥚', 'f':'🐟', 'g':'🍇', 'h':'🏠', 'i':'🍦',
+      'j':'🃏', 'k':'🔑', 'l':'🦁', 'm':'🌙', 'n':'🎵', 'o':'🐙', 'p':'🐼', 'q':'👑', 'r':'🌈',
+      's':'☀️', 't':'🌴', 'u':'☂️', 'v':'🎻', 'w':'🐋', 'x':'❌', 'y':'🧶', 'z':'⚡'
+    }
+  };
+
+  const KEYBOARD_LAYOUTS = {
+    azerty: [
+      ['a','z','e','r','t','y','u','i','o','p'],
+      ['q','s','d','f','g','h','j','k','l','m'],
+      ['w','x','c','v','b','n']
+    ],
+    qwerty: [
+      ['q','w','e','r','t','y','u','i','o','p'],
+      ['a','s','d','f','g','h','j','k','l'],
+      ['z','x','c','v','b','n','m']
+    ]
+  };
+
+  let currentMode = 'azerty';
+  let MAP = MAPS[currentMode];
+  let REVERSE = Object.fromEntries(Object.entries(MAP).map(([k,v]) => [v,k]));
+
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  const keystrip = document.getElementById('keystrip');
+  const historyWrap = document.getElementById('historyWrap');
+  const historyList = document.getElementById('historyList');
+  const encodeBtn = document.getElementById('encodeBtn');
+  let history = [];
+
+  function setOutput(text){
+    output.value = text;
+    output.setAttribute('data-empty', text.length === 0 ? 'true' : 'false');
+  }
+
+  function renderKeystrip(pairs){
+    keystrip.innerHTML = '';
+    pairs.forEach(([from, to], idx) => {
+      const cap = document.createElement('div');
+      cap.className = 'keycap';
+      cap.style.animationDelay = (idx * 0.035) + 's';
+      cap.textContent = to;
+      keystrip.appendChild(cap);
+    });
+  }
+
+  function lightKeyboard(letters){
+    document.querySelectorAll('.vkb-key').forEach(k => k.classList.remove('active'));
+    letters.forEach((l, idx) => {
+      const el = document.querySelector('.vkb-key[data-letter="' + l.toLowerCase() + '"]');
+      if(el){ setTimeout(() => el.classList.add('active'), idx * 25); }
+    });
+  }
+
+  function addHistory(from, to, mode){
+    if(!from.trim() || !to.trim()) return;
+    history.unshift({from, to, mode});
+    history = history.slice(0, 5);
+    renderHistory();
+  }
+
+  function renderHistory(){
+    if(history.length === 0){ historyWrap.style.display = 'none'; return; }
+    historyWrap.style.display = 'block';
+    historyList.innerHTML = '';
+    history.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'history-item';
+      row.innerHTML = '<span class="history-from"></span><span class="history-arrow">' + (item.mode === 'encode' ? '→' : '←') + '</span><span class="history-to"></span>';
+      row.querySelector('.history-from').textContent = item.from;
+      row.querySelector('.history-to').textContent = item.to;
+      row.addEventListener('click', () => {
+        input.value = item.from;
+        setOutput(item.to);
+        input.focus();
+      });
+      historyList.appendChild(row);
+    });
+  }
+
+  function typeOutput(text, callback){
+    setOutput('');
+    let i = 0;
+    const step = () => {
+      if(i <= text.length){
+        setOutput(text.slice(0, i));
+        i++;
+        setTimeout(step, 14);
+      } else if(callback){ callback(); }
+    };
+    step();
+  }
+
+  function encode(){
+    const text = input.value;
+    const pairs = [];
+    const letters = [];
+    let result = '';
+    for(const ch of text){
+      const lower = ch.toLowerCase();
+      if(MAP[lower]){
+        result += MAP[lower];
+        pairs.push([ch, MAP[lower]]);
+        letters.push(lower);
+      } else {
+        result += ch;
+      }
+    }
+    encodeBtn.classList.remove('pulse');
+    void encodeBtn.offsetWidth;
+    encodeBtn.classList.add('pulse');
+    lightKeyboard(letters);
+    typeOutput(result, () => {
+      renderKeystrip(pairs);
+      addHistory(text, result, 'encode');
+    });
+  }
+
+  function decode(){
+    const text = input.value;
+    const pairs = [];
+    const letters = [];
+    let result = '';
+    for(const ch of text){
+      if(REVERSE[ch]){
+        result += REVERSE[ch];
+        pairs.push([ch, REVERSE[ch]]);
+        letters.push(REVERSE[ch]);
+      } else {
+        result += ch;
+      }
+    }
+    setOutput(result);
+    renderKeystrip(pairs);
+    lightKeyboard(letters);
+    addHistory(text, result, 'decode');
+  }
+
+  encodeBtn.addEventListener('click', encode);
+  document.getElementById('decodeBtn').addEventListener('click', decode);
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    input.value = '';
+    setOutput('');
+    keystrip.innerHTML = '';
+    lightKeyboard([]);
+    input.focus();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); encode(); }
+  });
+
+  const copyBtn = document.getElementById('copyBtn');
+  const copyLabel = document.getElementById('copyLabel');
+  copyBtn.addEventListener('click', async () => {
+    if(!output.value) return;
+    let success = false;
+
+    if(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){
+      try{
+        await navigator.clipboard.writeText(output.value);
+        success = true;
+      } catch(err){ success = false; }
+    }
+
+    if(!success){
+      try{
+        output.removeAttribute('readonly');
+        output.focus();
+        output.select();
+        output.setSelectionRange(0, output.value.length);
+        success = document.execCommand('copy');
+        output.setAttribute('readonly', true);
+      } catch(err){ success = false; }
+    }
+
+    if(success){
+      copyBtn.classList.add('copied');
+      copyLabel.textContent = 'Copié !';
+      setTimeout(() => { copyBtn.classList.remove('copied'); copyLabel.textContent = 'Copier'; }, 1500);
+    } else {
+      output.removeAttribute('readonly');
+      output.focus();
+      output.select();
+      output.setAttribute('readonly', true);
+      copyLabel.textContent = 'Sélectionné, fais Ctrl+C';
+      setTimeout(() => { copyLabel.textContent = 'Copier'; }, 2200);
+    }
+  });
+
+  const toggleBtn = document.getElementById('toggleTable');
+  const tableWrap = document.getElementById('tableWrap');
+
+  function buildTable(){
+    const entries = Object.entries(MAP);
+    const cols = 5;
+    const rows = Math.ceil(entries.length / cols);
+    const table = document.createElement('table');
+    for(let r = 0; r < rows; r++){
+      const trLetter = document.createElement('tr');
+      const trCode = document.createElement('tr');
+      for(let c = 0; c < cols; c++){
+        const idx = r * cols + c;
+        if(idx < entries.length){
+          const [letter, code] = entries[idx];
+          const tdL = document.createElement('td');
+          tdL.className = 'letter';
+          tdL.textContent = letter.toUpperCase();
+          const tdC = document.createElement('td');
+          tdC.className = 'code';
+          tdC.textContent = code;
+          trLetter.appendChild(tdL);
+          trCode.appendChild(tdC);
+        }
+      }
+      table.appendChild(trLetter);
+      table.appendChild(trCode);
+    }
+    tableWrap.innerHTML = '';
+    tableWrap.appendChild(table);
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    const isHidden = tableWrap.style.display === 'none' || tableWrap.style.display === '';
+    buildTable();
+    tableWrap.style.display = isHidden ? 'block' : 'none';
+    toggleBtn.textContent = isHidden ? 'Masquer la table' : 'Voir la table de correspondance';
+  });
+
+  function buildKeyboard(layoutKey){
+    const rows = KEYBOARD_LAYOUTS[layoutKey] || KEYBOARD_LAYOUTS.azerty;
+    const vkb = document.getElementById('vkbWrap');
+    vkb.innerHTML = '';
+    rows.forEach(row => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'vkb-row';
+      row.forEach(letter => {
+        const key = document.createElement('div');
+        key.className = 'vkb-key';
+        key.setAttribute('data-letter', letter);
+        key.textContent = letter;
+        rowEl.appendChild(key);
+      });
+      vkb.appendChild(rowEl);
+    });
+  }
+  buildKeyboard('azerty');
+
+  document.getElementById('modeSwitch').addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-btn');
+    if(!btn) return;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.getAttribute('data-mode');
+    MAP = MAPS[currentMode];
+    REVERSE = Object.fromEntries(Object.entries(MAP).map(([k,v]) => [v,k]));
+    buildKeyboard(currentMode === 'azerty' ? 'azerty' : 'qwerty');
+    setOutput('');
+    keystrip.innerHTML = '';
+    if(tableWrap.style.display === 'block'){ buildTable(); }
+  });
+
+  function startApp(){
+    document.getElementById('intro').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+  }
+
+  if(document.readyState === 'complete'){
+    setTimeout(startApp, 1500);
+  } else {
+    window.addEventListener('load', () => setTimeout(startApp, 1500));
+  }
+</script>
+
+</body>
+</html>
